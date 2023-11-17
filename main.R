@@ -1,0 +1,1 @@
+print("slay new project")
