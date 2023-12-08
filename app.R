@@ -30,8 +30,7 @@ ui <- navbarPage(
   tabPanel("Home",
            fluidRow(
              column(6,
-                    # Medium-sized image on the left
-                    tags$img(src = "https://files.oaiusercontent.com/file-e0jtck1kbOPLwlipmA9p8tGk?se=2023-12-08T05%3A09%3A43Z&sp=r&sv=2021-08-06&sr=b&rscc=max-age%3D3599%2C%20immutable&rscd=attachment%3B%20filename%3Dimage.png&sig=qS7dPkEkDoLRFNZxxjQ/6Kk052glrra8htGDQ99iTnU%3D", 
+                    tags$img(src = "https://i.ibb.co/j6YWGYq/image.png", 
                              height = 550, 
                              width = "100%", 
                              style = "padding-left: 20px; padding-right: 10px;")
