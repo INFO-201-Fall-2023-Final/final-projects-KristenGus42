@@ -8,8 +8,8 @@ life_df <- read.csv("life_df.csv")
 merged_df <- merge(life_df, alcohol_df, by = c("Country", "Year"))
 
 processed_df <- merged_df[, c("Country", "Life.expectancy", "Alcohol", "percentage.expenditure", "WHO.Region", "Status")]
-processed_df <- na.omit(processed_df)  # Remove rows with NA values
-processed_df$Average_Alcohol_Consumption <- processed_df$Alcohol  # Example calculation
+processed_df <- na.omit(processed_df)
+processed_df$Average_Alcohol_Consumption <- processed_df$Alcohol 
 
 # UI Definition
 ui <- navbarPage(
