@@ -1,15 +1,66 @@
+#Head function: https://www.digitalocean.com/community/tutorials/head-and-tail-function-r
 library(shiny)
 library(shinydashboard)
 library(plotly)
+library(dplyr)
+library(ggplot2)
+library(sf)
+library(maps)
+
+source("main.R")
 
 # Data Loading and Preprocessing
-alcohol_df <- read.csv("alcohol_df.csv")
-life_df <- read.csv("life_df.csv")
-merged_df <- merge(life_df, alcohol_df, by = c("Country", "Year"))
+# alcohol_df <- read.csv("alcohol_df.csv")
+# life_df <- read.csv("life_df.csv")
+# merged_df <- merge(life_df, alcohol_df, by = c("Country", "Year"))
 
 processed_df <- merged_df[, c("Country", "Life.expectancy", "Alcohol", "percentage.expenditure", "WHO.Region", "Status")]
 processed_df <- na.omit(processed_df)
-processed_df$Average_Alcohol_Consumption <- processed_df$Alcohol 
+processed_df$Average_Alcohol_Consumption <- processed_df$Alcohol
+
+# Bar Graph Data
+reg_df <- merged_df 
+WHO_regions <- c("Africa", "Americas", "South-East Asia", "Europe", "Eastern Mediterranean", "Western Pacific")
+
+# Map Data 
+world_map <- st_as_sf(map('world', plot = FALSE, fill = TRUE))
+
+## ADDING
+helper <- merged_df
+
+helper <- filter(helper, Year == 2015)
+helper <- filter(helper, Sex == "Both sexes")
+helper_vec <- helper$Country
+helper_vec[170] <- "USA"
+helper_vec[43] <- "Czech Republic"
+helper_vec[44] <- "North Korea"
+helper_vec[76] <- "Iran"
+helper_vec[89] <- "Laos"
+helper_vec[106] <- "Micronesia"
+helper_vec[130] <- "South Korea"
+helper_vec[131] <- "Moldova"
+helper_vec[155] <- "syria"
+helper_vec[168] <- "UK"
+helper_vec[169] <- "Tanzania"
+helper_vec[174] <- "Venezuela"
+helper_vec[175] <- "Vietnam"
+helper_vec[133] <- "Russia"
+
+
+helper$Country <- helper_vec
+## ADDING
+
+m_df <- merge(world_map, helper, by.x = "ID", by.y = "Country")
+m_df_filtered <- m_df
+
+selected_columns <- c('ID', 'Average_Alcohol_Consumption', 'geometry', 'Year', 'WHO.Region', 'Status')
+m_df_filtered <- m_df[, selected_columns, drop = FALSE]
+
+# Filter rows for the year 2015
+m_df_filtered <- subset(m_df_filtered, Year == 2015)
+
+# Keep only unique country entries
+m_df_filtered <- unique(m_df_filtered)
 
 # UI Definition
 ui <- navbarPage(
@@ -70,13 +121,89 @@ ui <- navbarPage(
   ),
   
   # Additional tabs (placeholders for now)
-  tabPanel("World Map Trends"),
-  tabPanel("Consumption Barchart")
+  tabPanel("World Map Trends", 
+           tags$h3("Welcome! This map shows the average alcohol consumption between 2000 and 2015 on a gradient for select countries.
+            You can click/hover on the map to see the name of the country and its alchohol consumption amount.
+            You can also select different regions to zoom into that area and learn if it is a region with developed 
+            or developing countries!",style = "font-size: 16px;"),
+           plotlyOutput(outputId = "map"),
+           selectInput("region", "Select a Region", choices = c("", unique(m_df_filtered$WHO.Region))),
+           verbatimTextOutput("regionInfo")
+  ),
+  tabPanel("Consumption Barchart",
+           sidebarLayout(
+             sidebarPanel(
+               p("These graphs compare total expenditure to average alcohol consumption in specified regions. These graphs help zoom in to specific regions to observe trends that can be seen at a larger level. Here it can be observed that most regions and countries with a higher average rate of drinking, there is a higher total expenditure. This means that the more citizens drink, the more the country is spending, particularly on health."),
+               selectInput(
+                 inputId = "regName",
+                 label = "Select a Region",
+                 choices = WHO_regions
+               ), 
+               radioButtons("choice", "Do you want to see all of the countries, or restrict the view?",
+                            c("All" = "all", 
+                              "Restrict" = "res"), 
+                            selected = "all"),
+               sliderInput(
+                 inputId = "slideAlc",
+                 label = "How many of the top alcohol consumption:",
+                 min = 0,
+                 max = 10,
+                 value = 5
+               )
+             ),
+             mainPanel(
+               plotlyOutput("barGraph"),
+               plotlyOutput("alcGraph")
+             )
+           )
+          )
 )
 
 # Server Logic
 server <- function(input, output) {
-  # Reactive expression for filtered data
+  # Back end Bar graph: 
+  filtered <- reactive({
+    if(input$choice == "all") {
+      reg<- input$regName
+      return(merged_df[merged_df$WHO.Region== reg, ])
+    } else {
+      reg <- input$regName
+      reg_df <- merged_df[merged_df$WHO.Region== reg, ]
+      reg_df <- arrange(reg_df, Average_Alcohol_Consumption)
+      reg_df <- filter(reg_df, Year == "2000")
+      reg_df <- filter(reg_df, Sex == "Both sexes")
+      reg_df <- head(reg_df, input$slideAlc)
+      return(reg_df)
+    }
+  })
+  
+  output$barGraph <- renderPlotly({
+    p <- plot_ly(data = filtered(), 
+                 x = ~Country, 
+                 y = ~Average_Alcohol_Consumption,
+                 type = 'bar')  %>% layout(
+                   title = "Average Alcohol Consumption per Country",
+                   xaxis = list(title = "Country"),
+                   yaxis = list(title = "Average Alcohol Consumption (in Liters)")
+                 )
+  })
+  
+  output$alcGraph <- renderPlotly({
+    # Generate plot using plotly
+    p <- plot_ly(data = filtered(), 
+                 x = ~Country, 
+                 y = ~Total.expenditure,
+                 type = 'bar', 
+                 color = "red") %>% layout(
+                   title = "Total Expenditure",
+                   xaxis = list(title = "Country"),
+                   yaxis = list(title = "Total Expenditure")
+                 )
+    
+  })
+  
+  
+  # Back end Scatter Plot:
   filtered_data <- reactive({
     if (input$statusFilter == "All Countries") {
       processed_df
@@ -84,8 +211,7 @@ server <- function(input, output) {
       processed_df[processed_df$Status == input$statusFilter, ]
     }
   })
-  
-  # Plotly scatterplot rendering logic
+
   output$scatterPlot <- renderPlotly({
     p <- plot_ly(
       data = filtered_data(), 
@@ -104,6 +230,58 @@ server <- function(input, output) {
     )
     p
   })
+  
+  # Back end Map 
+  output$map <- renderPlotly({
+    #Creates a new df that only has countries of that region, and only they will be plotted on map
+    selected_region <- input$region
+    filtered_data <- m_df_filtered
+    if (selected_region != "") {
+      filtered_data <- m_df_filtered[m_df_filtered$WHO.Region == selected_region, ]
+    }
+    
+    map <- ggplot(filtered_data, aes(fill = Average_Alcohol_Consumption, text = paste(ID, "<br>Consumption: ", Average_Alcohol_Consumption, "liters"))) +
+      geom_sf(color = "white", size = 0.2) +
+      scale_fill_gradient(low = "lightcoral", high = "darkred", name = "Consumption (Liters)") +
+      theme_minimal() +
+      labs(title = "Average Alcohol Consumption 2000-2015")
+    
+    ggplotly(map, tooltip = c("text", "Consumption (Liters)"))
+    
+    
+    
+  })
+  
+  output$regionInfo <- renderText({
+    # Displays a line stating if the most countries in that region are developed or developing
+    selected_region <- input$region
+    if (is.null(selected_region) || selected_region == "") {
+      return(NULL)
+    }
+    
+    filtered_data <- m_df_filtered
+    
+    if (selected_region != "") {
+      filtered_data <- m_df_filtered[m_df_filtered$WHO.Region == selected_region, ]
+    }
+    
+    majority_status <- if (nrow(filtered_data) > 0) {
+      count_by_status <- table(filtered_data$Status)
+      majority_status <- names(count_by_status)[which.max(count_by_status)]
+    } else {
+      NA
+    }
+    
+    label_text <- if (is.na(majority_status)) {
+      ""
+    } else {
+      paste("The majority of countries in this region are", majority_status)
+    }
+    
+    return(label_text)
+  })
+  
+  
 }
 
 # Run the application 
